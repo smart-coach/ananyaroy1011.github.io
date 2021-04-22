@@ -1,0 +1,258 @@
+﻿// Register the namespace for the PageComponent class
+Type.registerNamespace('VisualSP.Ribbon');
+
+// Initialize the base elements
+VisualSP.Ribbon.PageComponent = function () {
+    VisualSP.Ribbon.PageComponent.initializeBase(this);
+}
+
+// This function is called by the script added by the delegate control.
+VisualSP.Ribbon.PageComponent.initialize = function () {
+    ExecuteOrDelayUntilScriptLoaded(Function.createDelegate(null, VisualSP.Ribbon.PageComponent.initializePageComponent), 'SP.Ribbon.js');
+}
+
+// Get the PageManager object and add the page component using addPageComponent.
+VisualSP.Ribbon.PageComponent.initializePageComponent = function () {
+    var ribbonPageManager = SP.Ribbon.PageManager.get_instance();
+    if (null !== ribbonPageManager) {
+        ribbonPageManager.addPageComponent(VisualSP.Ribbon.PageComponent.instance);
+        ribbonPageManager.get_focusManager().requestFocusForComponent(this.instance);
+    }
+}
+
+VisualSP.Ribbon.PageComponent.prototype = {
+    init: function () { },
+
+    getFocusedCommands: function () {
+        return [];
+    },
+    getGlobalCommands: function () {
+        this.trackHelpItems();
+        // Call the function registered in the delegate control
+        if (typeof getVisualSPWebPartGlobalCommands == 'function') {
+            return getVisualSPWebPartGlobalCommands();
+        }
+        if (typeof getVisualSPGlobalCommands == 'function') {
+            return getVisualSPGlobalCommands();
+        }
+        return [];
+    },
+    isFocusable: function () {
+        return true;
+    },
+
+    receiveFocus: function () {
+        return true;
+    },
+
+    yieldFocus: function () {
+        return true;
+    },
+
+    canHandleCommand: function (commandId) {
+        // Call the function registered in the delegate control
+        if (typeof visualSPWebPartCommandEnabled == 'function') {
+            return visualSPWebPartCommandEnabled(commandId);
+        }
+        if (typeof visualSPCommandEnabled == 'function') {
+            return visualSPCommandEnabled(commandId);
+        }
+        return false;
+    },
+
+    handleCommand: function (commandId, properties, sequence) {
+        // Call the function registered in the delegate control
+        if (typeof handleVisualSPWebPartCommand == 'function') {
+            return handleVisualSPWebPartCommand(commandId, properties, sequence);
+        }
+        if (typeof handleVisualSPCommand == 'function') {
+            return handleVisualSPCommand(commandId, properties, sequence);
+        }
+        return null;
+    },
+    openDialog: function (url, title, callback) {
+        var options = {
+            url: url,
+            title: title,
+            allowMaximize: true,
+            showClose: true,
+            dialogReturnValueCallback: callback,
+            height: (window.innerHeight * .6)
+        }
+        SP.SOD.execute('sp.ui.dialog.js', 'SP.UI.ModalDialog.showModalDialog', options);
+        //SP.UI.ModalDialog.showModalDialog(options);
+    },
+
+    addHelpTabItem: function (url) {
+        //window.open(url + '&Source=' + encodeURIComponent(window.location.href));
+        this.openDialog(url + '&Source=' + encodeURIComponent(window.location.href), 'Add VisualSP Help Item', function () { });
+    },
+    editHelpTabItem: function (url) {
+        //window.open(url + '&Source=' + encodeURIComponent(window.location.href));
+        this.openDialog(url + '&Source=' + encodeURIComponent(window.location.href), 'Edit VisualSP Help Item', function () { });
+    },
+    toggleHelpTabEditMode: function () {
+        var enabledCookieValue = this.readCookie('visualSPEditModeEnabled');
+        if (enabledCookieValue == 'true') {
+            this.createCookie('visualSPEditModeEnabled', 'false');
+        } else {
+            this.createCookie('visualSPEditModeEnabled', 'true');
+        }
+        window.location.reload(true);
+    },
+    readCookie: function (name) {
+        var nameEQ = name + '=';
+        var ca = document.cookie.split(';');
+        for (var i = 0; i < ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    },
+    createCookie: function (name, value) {
+        document.cookie = name + '=' + value + '; path=/';
+    },
+    getLocalStorage: function (key) {
+        return window.localStorage.getItem(key);
+    },
+    setLocalStorage: function (key, value) {
+        window.localStorage.setItem(key, value);
+    },
+    getVisualSpLayoutsFolder: function () {
+        var layoutsUrl = '_layouts';
+        if (_spPageContextInfo.layoutsUrl != null) {
+            layoutsUrl = _spPageContextInfo.layoutsUrl;
+        }
+        return _spPageContextInfo.webServerRelativeUrl.replace(/\/$/, "") + '/' + layoutsUrl + '/SharePointVideos.VisualSP/';
+    },
+
+    viewHelpItem: function (helpItem) {
+        var title = helpItem.Title;
+        var viewer = helpItem.Viewer.toLowerCase();
+        var media = helpItem.Media;
+        var showInNewWindow = helpItem.ShowInNewWindow;
+
+        var url = this.getVisualSpLayoutsFolder() + 'MediaPage.aspx?';
+        url += 'ItemId=' + encodeURIComponent(helpItem.RibbonProviderItemId);
+        url += '&ListId=' + encodeURIComponent(helpItem.RibbonProviderListId);
+        url += '&WebId=' + encodeURIComponent(helpItem.RibbonProviderWebId);
+        url += '&SiteId=' + encodeURIComponent(helpItem.RibbonProviderSiteId);
+        url += '&Locale=' + encodeURIComponent(helpItem.Locale);
+        url += '&IsDlg=' + (showInNewWindow ? "0&PopOut=true" : "1");
+
+        VisualSPLogActivity(
+            window.location.href,
+            helpItem.RibbonProviderWebApplicationId,
+            helpItem.RibbonProviderSiteId,
+            helpItem.RibbonProviderWebId,
+            helpItem.RibbonProviderListId,
+            helpItem.RibbonProviderItemId,
+            helpItem.UniqueId,
+            helpItem.Locale,
+            '',
+            '',
+            'Auto Load')
+
+        if (viewer == 'image') {
+            VisualSPOpenImage(url, title, showInNewWindow);
+        } else if (viewer == 'document') {
+            VisualSPOpenPageOrDocument(media, title, showInNewWindow);
+        } else {
+            VisualSPCallMediaPage(url, title, showInNewWindow);
+        }
+    },
+    find: function (array, predicate) {
+        if (array == null) {
+            throw new TypeError('"array" is null or not defined');
+        }
+
+        var o = array;
+        var len = o.length >>> 0;
+        if (typeof predicate !== 'function') {
+            throw new TypeError('predicate must be a function');
+        }
+
+        var k = 0;
+        while (k < len) {
+            var kValue = o[k];
+            if (predicate.call(this, kValue, k, o)) {
+                return kValue;
+            }
+            k++;
+        }
+        return undefined;
+    },
+    trackHelpItems: function () {
+        // If inline help is enabled or the web part is loaded then we have to rely on it to do the tracking.
+        if ((typeof (_visualSpIsInlineHelpEnabled) != 'undefined' && _visualSpIsInlineHelpEnabled) || (typeof (_visualSpIsWebPartLoaded) != 'undefined' && _visualSpIsWebPartLoaded)) return;
+        var newItems = 0;
+        var newItemsToUser = 0;
+        var itemsTracker = JSON.parse(this.getLocalStorage('VisualSpOnPremHelpItemsTracker'));
+        if (itemsTracker == null) {
+            itemsTracker = [];
+        }
+        var autoLoadHelpItem = null;
+        var helpItems = [];
+        if (typeof (_visualSpHelpItemIdsForTracking) != 'undefined') {
+            helpItems = helpItems.concat(_visualSpHelpItemIdsForTracking);
+        }
+        if (typeof (_visualSpHelpItemIdsForTrackingFromWebPart) != 'undefined') {
+            for (var i = 0; i < _visualSpHelpItemIdsForTrackingFromWebPart.length; i++) {
+                if (this.find(helpItems, function (hi) { return hi.UniqueId == _visualSpHelpItemIdsForTrackingFromWebPart[i].UniqueId }) != undefined) {
+                    continue;
+                }
+                helpItems.push(_visualSpHelpItemIdsForTrackingFromWebPart[i]);
+            }
+        }
+        for (var i = 0; i < helpItems.length; i++) {
+            var helpItem = helpItems[i];
+            var loadCountFromDateIncrement = 0;
+            if (helpItem.AutoShowOnViewAfter != null && moment(helpItem.AutoShowOnViewAfter) <= moment()) {
+                loadCountFromDateIncrement++;
+            }
+            var trackedItem = this.find(itemsTracker, function (nt) { return nt.HelpItemId == helpItem.UniqueId });
+            if (trackedItem != undefined) {
+                trackedItem.LastLoadedDate = new Date();
+                trackedItem.LoadCount++;
+                if (trackedItem.LoadCountFromDate == null) {
+                    trackedItem.LoadCountFromDate = loadCountFromDateIncrement;
+                } else {
+                    trackedItem.LoadCountFromDate = trackedItem.LoadCountFromDate + loadCountFromDateIncrement;
+                }
+            } else {
+                trackedItem = {
+                    HelpItemId: helpItem.UniqueId,
+                    LastLoadedDate: (new Date()),
+                    LoadCount: 1,
+                    LoadCountFromDate: loadCountFromDateIncrement
+                };
+                itemsTracker.push(trackedItem);
+            }
+            if (helpItem.AutoShowOnViewAfter == null) {
+                trackedItem.LoadCountFromDate = 0;
+            }
+
+            if (autoLoadHelpItem == null) {
+                if (helpItem.AutoShowOnView != null && helpItem.AutoShowOnView > 0) {
+                    if (helpItem.AutoShowOnViewAfter != null && moment(helpItem.AutoShowOnViewAfter) <= moment() && helpItem.AutoShowOnView == trackedItem.LoadCountFromDate) {
+                        autoLoadHelpItem = helpItem;
+                    } else if (helpItem.AutoShowOnViewAfter == null && helpItem.AutoShowOnView == trackedItem.LoadCount) {
+                        autoLoadHelpItem = helpItem;
+                    }
+                }
+            }
+        }
+        if (autoLoadHelpItem != null) {
+            this.viewHelpItem(autoLoadHelpItem);
+        }
+        this.setLocalStorage("VisualSpOnPremHelpItemsTracker", JSON.stringify(itemsTracker));
+    }
+}
+
+// Register the PageComponent class and set it's base class as CUI.Page.PageComponent
+VisualSP.Ribbon.PageComponent.registerClass('VisualSP.Ribbon.PageComponent', CUI.Page.PageComponent);
+// Set the PageComponent.instance variable to a new instance of the PageComponent class
+VisualSP.Ribbon.PageComponent.instance = new VisualSP.Ribbon.PageComponent();
+// Notify waiting jobs that this script has finished loading.
+NotifyScriptLoadedAndExecuteWaitingJobs("VisualSP.Ribbon.PageComponent.js");
