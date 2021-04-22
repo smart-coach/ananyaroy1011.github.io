@@ -1,0 +1,158 @@
+// Nintex Workflow looks for various variables/methods to base its behaviour on
+// This file is required because it the only way currently possible for Nintex Workflow to run this code
+// BEAWARE: This script is run EVERYWHERE in SharePoint. Even outside of Nintex Workflow designer.
+
+// Used by the Workflow Settings dialog
+var enableEditFormButton = true;
+
+// Used by the Variables dialog
+function GetVariableInUseErrorMessageExtended(canvas, variable) {
+    // We check the start form for the variable as the caller doesn't check the workflow variables config
+
+    // Find the correct activity config
+    var activityCollection = canvas.getElementsByTagName("div");
+    variable = variable.toLowerCase();
+    for (var i = 0; i < activityCollection.length; i++) {
+        // Exclude any that the caller has covered
+        if (activityCollection[i].attributes[sConfigAttribute] != null && activityCollection[i].attributes[sConfigAttribute].value != "") {
+            continue;
+        }
+
+        // Check the children for the config
+        for (var j = 0; j < activityCollection[i].children.length; j++) {
+            if (activityCollection[i].children[j].attributes[sConfigAttribute] != null && activityCollection[i].children[j].attributes[sConfigAttribute].value != "") {
+                // Found it. Check if it is the NWWorkflowVariablesAdapter
+                var config = activityCollection[i].children[j].attributes[sConfigAttribute].value;
+                var xml = CreateXmlDoc(config);
+                if (xml.selectSingleNode("/NWActionConfig/Type").text !== "Nintex.Workflow.Activities.Adapters.NWWorkflowVariablesAdapter") {
+                    continue;
+                }
+
+                // Found the correct activity. Check the extension properties for the variable
+                var extensionPropertiesNode = xml.selectSingleNode("/NWActionConfig/ExtensionProperties");
+                if (extensionPropertiesNode == null) {
+                    // No extension properties. No variables
+                    return null;
+                }
+
+                var configLower = extensionPropertiesNode.xml.toLowerCase();
+                if (configLower.indexOf("{workflowvariable:" + variable + "}") > -1) {
+                    var xml = CreateXmlDoc(config);
+                    return "\n" + nwfStartFormTitle;
+                }
+
+                return null;
+            }
+        }
+    }
+}
+
+var nintexFormsFormProduct = "NintexForms";
+var nintexFormsFormFileNamesFromActionsBeingDeleted;
+
+// Called by Nintex Workflow when the user deletes an action
+function OnActionDeleting(selectedActivityMenu) {
+    // Build a list of the forms that the action and nested actions are using
+    nintexFormsFormFileNamesFromActionsBeingDeleted = new Array();
+    var configXml = GetConfigBlob(selectedActivityMenu);
+    var configXmlDocument = new ActiveXObject("Msxml2.DOMDocument");
+    configXmlDocument.loadXML(configXml);
+    AddActionFormFileNameToArrayIfUsingNintexForms(configXmlDocument);
+    ProcessAllChildActions(selectedActivityMenu, AddActionsFormFileNameToArrayIfUsingNintexForms, false, false);
+}
+
+function OnActionDeleted(selectedActivityMenu) {
+    var topLevelElement = document.getElementById(CANVAS_DIV_ID);
+    
+    // Go through each form that was on a deleted action and see if it isn't in use anymore. If so, remove the form
+    for (var index = 0; index < nintexFormsFormFileNamesFromActionsBeingDeleted.length; index++) {
+        var formFileName = nintexFormsFormFileNamesFromActionsBeingDeleted[index];
+        var formInUse = IsFormUsedAnywhere(formFileName);
+        if (formInUse) {
+            continue;
+        }
+
+        // Remove the form (which is stored as a extension property)
+        var configXml = GetConfigBlob(document.getElementById(sWorkflowVariableDivName).childNodes[0]);
+        var configXmlDocument = CreateXmlDoc(configXml);
+        RemoveExtensionProperty(configXmlDocument, formFileName);
+        SetConfigBlob(document.getElementById(sWorkflowVariableDivName).childNodes[0], configXmlDocument.xml);
+    }
+
+    // Clean up
+    nintexFormsFormFileNamesFromActionsBeingDeleted = null;
+}
+
+
+function IsFormUsedAnywhere(fileName) {
+    // Taken from IsSharedForm() in FormType.ascx
+    var regEx = new RegExp("FileName=&amp;quot;" + fileName + "&amp;quot", "gm");
+    var matches = document.getElementById(CANVAS_DIV_ID).outerHTML.match(regEx);
+    return matches != null && matches.length > 0;
+}
+
+function AddActionsFormFileNameToArrayIfUsingNintexForms(actionConfigXml, actionDiv) {
+    return AddActionFormFileNameToArrayIfUsingNintexForms(actionConfigXml);
+}
+
+function AddActionFormFileNameToArrayIfUsingNintexForms(actionConfigXml) {
+    // Ensure the action has a forms url blob
+    var formsNode = actionConfigXml.selectSingleNode("/NWActionConfig/Parameters/Parameter[@Name='FormUrl']/PrimitiveValue/@Value");
+    if (!formsNode) {
+        return false;
+    }
+
+    // Get the file name of the Nintex Forms form
+    var formsXmlDocument = new ActiveXObject("Msxml2.DOMDocument");
+    formsXmlDocument.loadXML(formsNode.text);
+    var formFileName = GetActionNintexFormFileName(formsXmlDocument);
+    if (formFileName == null) {
+        return false;
+    }
+
+    nintexFormsFormFileNamesFromActionsBeingDeleted[nintexFormsFormFileNamesFromActionsBeingDeleted.length] = formFileName;
+    return true;
+}
+
+function GetActionNintexFormFileName(xmlDocument) {
+    if (xmlDocument == null) {
+        return null;
+    }
+
+    var selector = "/Forms/Form[@Product='" + nintexFormsFormProduct + "']";
+    if (!xmlDocument.selectSingleNode(selector)) {
+        return null;
+    }
+
+    return xmlDocument.selectSingleNode(selector).getAttribute("FileName");
+}
+
+function OnVariableRenamed(activityConfigXML, variableNodes) {
+
+    var nodesList = activityConfigXML.selectNodes("//ExtensionProperty/Value");
+
+    if (nodesList != null) {
+        for (var nodeCount = 0; nodeCount < nodesList.length; nodeCount++) {
+            var nodeText = nodesList[nodeCount].text;
+
+            if (nodeText != null && nodeText != "") {
+
+                var wfVarNameChanged = false;
+                for (var varCount = 0; varCount < variableNodes.length; varCount++) {
+                    var oldWfvarName = variableNodes[varCount].getAttribute("OldVariableName");
+                    var newWfvarName = variableNodes[varCount].getAttribute("Name");
+                    if (oldWfvarName != null && nodeText.search(oldWfvarName) != -1) {
+                        var oldVariableTextValue = "\"WorkflowVariable:".concat(oldWfvarName, "\"");
+                        var newVariableTextValue = "\"WorkflowVariable:".concat(newWfvarName, "\"");
+                        nodeText = nodeText.replace(new RegExp(oldVariableTextValue, "g"), newVariableTextValue);
+                        wfVarNameChanged = true;
+                    }
+                }
+                if (wfVarNameChanged) {
+                    nodesList[nodeCount].text = nodeText;
+                }
+            }
+
+        }
+    }
+}

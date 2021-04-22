@@ -1,0 +1,37 @@
+﻿#s4-bodyContainer {
+	padding-bottom: 0px;
+    min-height: 80%;
+}
+/*#s4-titlerow {
+    width: 83.6%;
+    float: right;
+    margin-left: 0px;
+}*/
+#s4-titlerow{
+    border-top: 1px solid #dadad7 !important;
+}
+#suiteBarLeft .ms-tableCell:before {
+    padding: 10px 10px 10px 10px;
+    content: url("/_layouts/15/images/DTTL.DOL.Branding/logoEmpty_white.png") !important;
+}
+/*Begin Suite Bar Right */
+#dolHeaderLinks a{
+	color: #012877 !important;
+    text-decoration: none;
+}
+/*Title Row*/
+
+
+#DeltaSuiteLinks {
+    vertical-align:top;
+}
+/*li[text='Sign Out'],
+#DeltaSuiteLinks,
+.ms-core-menu-list li[text='About Me']
+{
+    display:none !important;
+}*/
+#suiteLinksBox a{ color: #012877 !important;}
+a[id*='_hoverFollow'] {
+    display: none;
+}
