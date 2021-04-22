@@ -1,0 +1,149 @@
+﻿var preAuthDebugOn = false;
+try { preAuthDebugOn = (parent.document.location.href.indexOf('debugPreAuth') > -1); } catch (e) { }
+
+var timeoutID;
+var states = '';
+var notifyId = '';
+var targetUrl = '';
+var preAuthPagePath = '/_layouts/15/DTTL.DOL.PreAuthentication/PreAuthentication.aspx';
+var nComplete = 0;
+var PreAuthcurrentURL = window.location.href;
+var sharedDomain = "deloitteonline.com";
+var domainsADFS = [
+			{ domain: 'deloitteresources.com', url: '' },
+			{ domain: 'deloitte.com', url: '' }
+];
+var urnobject = '';
+var preAuthobject = '';
+$(document).ready(function () {
+    var currSubdomain = firstSubdomain(window.location) + ".";
+
+    $.each(domainsADFS, function (key) {
+        $('a[href*="' + domainsADFS[key].domain + '"]:not(a[href*="javascript"]):not(a[href*="mailto"]):not(a[onclick])').bind("click", function (e) {
+            if ($(this).attr('target') != "_blank") {
+            }
+        });
+    });
+
+    $('a[href*="' + sharedDomain + '"]:not(a[href*="//' + currSubdomain + '"]):not(a[href*="javascript"]):not(a[href*="mailto"]):not(a[onclick])').bind("click", function (e) {
+        if ($(this).attr('target') != "_blank") {
+
+            //gachitturi:Added below if condition to fix the Preauthentication issue in SP2013. It addresses the PreAuth issue only for DOL sites. Changes done in R8. Reviewed by araj.
+            if (PreAuthValues != null && PreAuthValues.split(',').length > 0) {
+                for (var i in PreAuthValues.split(',')) {
+                    if (GetDomainUrl(PreAuthValues.split(',')[i].split('/:')[0]) == GetDomainUrl(this.href)) {
+                        preAuthobject = encodeURIComponent(PreAuthValues.split(',')[i].split('/:')[1]);
+                    }
+                }
+            }
+            if (preAuthobject !== null && preAuthobject != '') {
+                e.preventDefault();
+                PreAuthClick(this, 'subdomain');
+            }
+        }
+    });
+
+    if (preAuthDebugOn)
+        $('#divPreAuthDebug').attr('style', 'display: block;');
+});
+
+function PreAuthClick(ctrl, target) {
+    logMessageToULS('Execution of function PreAuthClick started for URL:' + PreAuthcurrentURL, 'PreAuthentication.js', 'PreAuthModule');
+    targetUrl = ctrl.href;
+
+    try {
+        NotifySpin(ctrl);
+        if (target == 'subdomain') {
+
+            //gachitturi:Added below line of code to fix the Preauthentication issue in SP2013. It addresses the PreAuth issue only for DOL sites. Changes done in R8. Reviewed by araj.
+           
+            preAuthUrl = ADFSEndPointUrl.split('/adfs/')[0] + '/adfs/ls/?wa=wsignin1.0&wtrealm=' + 'urn%3a' + preAuthobject + '%3asharepoint&wctx=' + encodeURIComponent(GetBaseUrl(targetUrl)) + '%2f_layouts%2f15%2fAuthenticate.aspx';
+           
+            logMessageToULS('Execution If block for function PreAuthClick started for URL:' + PreAuthcurrentURL + ' preAuthUrl:' + preAuthUrl, 'PreAuthentication.js', 'PreAuthModule');
+        }
+        $('#preAuthIFrame').attr('src', preAuthUrl);
+        //timeoutID = window.setTimeout("ContinueToTarget", 20000); //20 seconds
+        CheckiframeStateandRedirect();
+    }
+    catch (err) {
+        if (preAuthDebugOn)
+            alert('PreAuth Error has occured: \n' + err);
+    }
+}
+
+function GetDomainUrlHit(dest_domain) {
+    var returnUrl = '';
+    try {
+        for (var key in domainsADFS) {
+            if (dest_domain.indexOf(domainsADFS[key].domain) > -1) {
+                returnUrl = domainsADFS[key].url;
+                break;
+            }
+        }
+    }
+    catch (err) { }
+    logMessageToULS('Execution of function GetDomainUrlHit started for URL:' + PreAuthcurrentURL + ' returnUrl:' + returnUrl, 'PreAuthentication.js', 'PreAuthModule');
+    return returnUrl;
+}
+
+function GetDomainUrl(url) {
+    var parser = document.createElement('a');
+    parser.href = url;
+    return parser.hostname;
+}
+
+function GetBaseUrl(url) {
+    var parser = document.createElement('a');
+    parser.href = url;
+    return (parser.protocol + "//" + parser.hostname);
+}
+
+function ContinueToTarget() {
+    window.clearTimeout(timeoutID);
+    if (preAuthDebugOn)
+        $("#preAuthMsg").html((states += ", TimeLimit!"));
+
+    if (targetUrl.length > 0) {
+        window.location = targetUrl;
+    }
+}
+
+function CheckiframeStateandRedirect() {
+    var iframeADFS = document.getElementById('preAuthIFrame');
+    iframeADFS.onload = function () {
+        setTimeout(function () { window.location = targetUrl; }, 20000);
+    };
+    //var currState = iframeADFS.readyState;
+    //if (preAuthDebugOn) {
+    //    if (currState == "loading")
+    //        states += ".";
+    //    else if (currState == "interactive")
+    //        states += "~";
+    //    else
+    //        states += "," + currState;
+    //    $("#preAuthMsg").html(states);
+    //}
+    //nComplete += ((currState == "complete") ? 1 : 0);
+
+    //if (currState == "complete" && nComplete > 1) {
+    //    window.location = targetUrl;
+    //}
+    //else {
+    //    setTimeout(function () { CheckiframeStateandRedirect() }, 100);
+    //}
+}
+
+function firstSubdomain(url) {
+    var subDomains = window.location.host.split('.');
+    return subDomains[0];
+}
+
+function NotifySpin(ctrl) {
+    var left = $(ctrl).offset().left;
+    var top = $(ctrl).offset().top;
+
+    $('#divSpin').css({
+        top: top,
+        left: left - 25
+    }).show();
+}
