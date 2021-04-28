@@ -1,8 +1,0 @@
-﻿window.g_InlineHelpStrings = {
-    'SlidePanelInstructions': 'Enable or disable the VisualSP Inline Help by clicking the "ON/OFF" button. To access VisualSP help content click any of the various help icons located on the page.',
-    'SlidePanelSwitchOnLabel': 'ON',
-    'SlidePanelSwitchOffLabel': 'OFF',
-    'SlidePanelEditModeEnabled': 'VisualSP: Edit Mode Enabled'
-};
-
-NotifyScriptLoadedAndExecuteWaitingJobs("InlineHelpSlidePanel.strings.js");
